@@ -3,6 +3,7 @@
 import unittest
 import json
 import time
+import httplib
 
 # functional import
 
@@ -152,30 +153,31 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
             header = response.info()
             if "Content-Type" in header:
                 self.http_request_handler.response_content_type = header["Content-Type"]
+                self.DEBUG.set_value("14400 Last content type", header["Content-Type"])
 
             self.http_request_handler.response_data = response_data
-            self.set_output_value_sbc(self.PIN_O_SSTATUS, "Recieved target data")
+            self._set_output_value(self.PIN_O_SSTATUS, "Received target data")
+            self.DEBUG.set_value("14400 Last target URL fetched", url_resolved)
 
         except Exception as e:
-            # self.set_output_value_sbc(self.PIN_O_BERROR, True)
             self.DEBUG.add_message("14400: " + str(e) + " for '" + url_resolved + "'")
-            self.set_output_value_sbc(self.PIN_O_SSTATUS, str(e))
+            self._set_output_value(self.PIN_O_SSTATUS, str(e))
 
     def run_server(self):
         port = self._get_input_value(self.PIN_I_NPORT)
         server_address = ('', port)
 
         if self.httpd:
+            self.DEBUG.add_message("14400: Shutting down server")
             self.httpd.shutdown()
-        else:
-            print("- httpd not yet existing")
 
         self.httpd = ThreadedTCPServer(server_address, self.http_request_handler)
-        print("- Starting server on port " + str(port))
-        self.t = threading.Thread(target=self.httpd.serve_forever())
+        ip, port = self.httpd.server_address
+        self.t = threading.Thread(target=self.httpd.serve_forever)
         self.t.setDaemon(True)
         self.t.start()
-        print("- Server running")
+        self.DEBUG.add_message("14400: Server running on " + str(ip) + ":" + str(port))
+
 
     def on_init(self):
         self.DEBUG = self.FRAMEWORK.create_debug_section()
@@ -184,6 +186,7 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
         self.t = ""
 
         self.http_request_handler = MyHttpRequestHandler
+        # self.http_request_handler.on_init()
 
     def on_input_value(self, index, value):
         if index == self.PIN_I_NPORT:
@@ -204,12 +207,7 @@ class MyHttpRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
         self.response_content_type = ""
         self.response_data = ""
 
-    def do_POST(self):
-        print("- Entering do_POST")
-
     def do_GET(self):
-        print("- Entering do_GET")
-
         self.send_response(200)
         self.send_header('Content-type', self.response_content_type)
         self.end_headers()
@@ -232,30 +230,56 @@ class TestSequenceFunctions(unittest.TestCase):
         #self.test.debug_input_value[self.test.PIN_I_SAGS] = self.cred["PIN_I_SAGS"]
         self.test.on_init()
 
-        # self.target_url = "https://nina.api.proxy.bund.dev/api31/dashboard/091620000000.json"
         self.target_url = "https://nina.api.proxy.bund.dev/api31/appdata/gsb/eventCodes/BBK-EVC-001.png"
         self.test.debug_input_value[self.test.PIN_I_STARGETURL] = self.target_url
 
         self.port = 20004
         self.test.debug_input_value[self.test.PIN_I_NPORT] = self.port
 
-    def test_get_data(self):
-        print("\n### test_get_data")
+    # 1. The module shall fetch the content provided by a user configurable URL (*target URL*).
+    # 3. The module shall fetch data from http and https URL.
+    def test_1_3_get_data(self):
+        print("\n### test_1_3_get_data")
+        self.target_url = "https://nina.api.proxy.bund.dev/api31/appdata/gsb/eventCodes/BBK-EVC-001.png"
+        self.test.debug_input_value[self.test.PIN_I_STARGETURL] = self.target_url
         self.test.on_input_value(self.test.PIN_I_STARGETURL, self.target_url)
-        self.assertTrue(self.test.debug_output_value[self.test.PIN_O_SSTATUS] == "Recieved target data")
+        self.assertTrue(self.test.debug_output_value[self.test.PIN_O_SSTATUS] == "Received target data")
 
-    def test_run_server(self):
-        print("\n### test_run_server")
+    # 2. The module shall provide a HTTP server on 127.0.0.1 and a user configurable port.
+    # 4. The module shall provide the fetched data as response to a incoming GET request.
+    # 5. The module shall set the content header field bases on the *target URL* content information.
+    def test_2_4_5_run_server(self):
+        print("\n### test_2_3_run_server")
+
+        # set up http client
+        conn = httplib.HTTPConnection("127.0.0.1", self.port)
+
+        # test
         self.test.on_init()
         self.test.get_data()
-        # self.test.http_request_handler.response_data = "Hello world"
-        print("- start server")
         self.test.on_input_value(self.test.PIN_I_NPORT, self.port)
-        print("- continue test")
+        self.test.http_request_handler.response_data = "Hello world"
         time.sleep(3)
+
+        conn.request("GET", "/dummy.png")
+        r1 = conn.getresponse()
+        print r1.status, r1.reason
+        data1 = r1.read()
+        self.assertTrue(data1 == "Hello world")
+        self.assertTrue(r1.getheader("Content-type") == "image/png")
+
         target_url = "https://nina.api.proxy.bund.dev/api31/appdata/gsb/eventCodes/BBK-EVC-015.png"
         self.test.debug_input_value[self.test.PIN_I_STARGETURL] = target_url
         self.test.on_input_value(self.test.PIN_I_STARGETURL, target_url)
+        self.test.http_request_handler.response_data = "Hello user"
+        time.sleep(3)
+
+        conn.request("GET", "/dummy.png")
+        r1 = conn.getresponse()
+        print r1.status, r1.reason
+        data1 = r1.read()
+        self.assertTrue(data1 == "Hello user")
+        self.assertTrue(r1.getheader("Content-type") == "image/png")
 
 
 if __name__ == '__main__':

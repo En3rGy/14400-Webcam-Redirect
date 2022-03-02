@@ -1,33 +1,36 @@
-# NINA API (14109)
+# Webcam Redirect (14400)
 
-## Beschreibung 
+## Description 
 
-Baustein zum Abruf von Warnmeldungen über die <a href="https://nina.api.bund.dev/">NINA API</a> des Bundesamt für Bevölkerungsschutz</p>
+The module provides data fetched from a target URL via an internal server on IP 127.0.0.1 and a configurable port.
+Target URL and port can be updated during runtime. Fetching https URL is possible.
+
+*Caution 1*: Do not expect any security activities performed by the internal server!
+
+*Caution 2*: The content of the target URL is fetched on setting the target URL only. The URL must be re-set if the content shall be fetched again.
+
+Use Case: Create dynamic images hosted by different URLs, e.g.
+- show different colors for current status of rgbw led
+- show different status symbols provided by an external source
+
+### Installation
+1. Create a webcam and connect it to 127.0.0.1:*your port*
+2. Create a logic to create and update the target URL depending on your demands
 
 ## Inputs
 
 | No. | Name | Initialisation | Description |
 | --- | --- | --- | --- |
-| 1 | Amtlicher Gebietsschlüssel | "" | Amtlicher Gebietsschlüssel, kann z.B. <a href="">hier</a> bezogen werden. Die Letzten 7 Stellen müssen mit "0000000" ersetzt werden, da Daten nur auf Kreisebene bereitgestellt werden. |
-| 2 | Update-Rate (s) | 307 | Intervall in Sekunden, in dem der BBK-Server nach neuen Warnungen abgefragt wird. |
-| 3 | Ein/Aus | 1 | Bei 1 arbeitet der Bautein, bei 0 nicht |
+| 1 | Port | 20002 | Port of the server |
+| 2 | Target URL | "" | URL from where the content is fetched |
 
-
-## Ausgänge
+## Outputs
 
 | No. | Name | Initialisation | Description |
 | --- | --- | --- | --- |
-| 1 | Alle Warnungen | "" | Text mit allen aktuell vorliegenden Warnungen |
-| 2 | Meldung | "" | Kritischste Warnung |
-| 3 | Schweregrad | 0 | Schweregrad der kritischsten Meldung |
-| 4 | Dringlichkeit | "" | Dringlichkeit der kritischsten Meldung |
-| 5 | Gewissheit | 0 | Sicherheit / Gewissheit der kritischsten Meldung |
-| 6 | Beschriebung | 0 | Beschreibung der kritischsten Meldung |
-| 7 | Anleitung | 0 | Verhaltensanweisung zur kritischsten Meldung |
-| 8 | Symbol-Id | 0 | Id des Symbols für die kritischste Meldung<br>Grundlage für die Id ist der EVent Code. das BBK bietet Symbole für folgende Event Codes BBK-EVC-?, wobei das ? eine 3-stellige Zahl ersetzt. Für den Event Code BBK-EVC-004 liefert der Baustein bspw. die Id 4.<br>1 = Std. Symbol, bzw. Event Code nicht von der Art BBK-EVC<br>0 = Keine Meldung. |
-| 9 | Json | 0 | Json-Meldung zu den empfangenen Warnungen |
+| 1 | Status | "" | Text indicating the current status of the module |
 
-## Sonstiges
+## Others
 
 - Neuberechnung beim Start: Nein
 - Baustein ist remanent: Nein
@@ -36,24 +39,21 @@ Baustein zum Abruf von Warnmeldungen über die <a href="https://nina.api.bund.de
 
 ### Change Log
 
-
-- v0.02
-  - Impr.: Symbol-URL als Ausgabe ergänzt
 - v0.01
-    - Initiales Release
+    - Initial Release
 
 ### Open Issues / Know Bugs
 
-- none
+- Setting / storing the data of the target URL is not thread safe
 
 ### Support
 
-Please use [github issue feature](https://github.com/En3rGy/14109_NINA_API/issues) to report bugs or rise feature requests.
+Please use [github issue feature](https://github.com/En3rGy/14400-Webcam-Redirect/issues) to report bugs or rise feature requests.
 Questions can be addressed as new threads at the [knx-user-forum.de](https://knx-user-forum.de) also. There might be discussions and solutions already.
 
 ### Code
 
-Der Python-Code des Bausteins befindet sich in der hslz Datei oder auf [github](https://github.com/En3rGy/14109_NINA_API).
+The Python-Code of the module can be accessed via [github](https://github.com/En3rGy/14400-Webcam-Redirect).
 
 ### Devleopment Environment
 
@@ -64,14 +64,11 @@ Der Python-Code des Bausteins befindet sich in der hslz Datei oder auf [github](
 
 ## Requirements
 
-1. Der Baustein soll ein- und ausschaltbar sein.
-2. Der Baustein soll in vorgegebenen Intervallen arbeiten.
-3. Der Baustein soll für vorgegebene Gebiete bestehende Warnungen des BBK abrufen. 
-4. Der Baustein soll bei empfangenen Warnungen, die Headlines aller Warnungen auf einem Ausgang ausgeben. 
-5. Der Baustein soll bei empfangenen Warnungen, die bedeutendste Warnung bestimmen. 
-6. Der Baustein soll bei empfangenen Warnungen, für die bedeutendste Warnung die Headline ausgeben. 
-7. Der Baustein soll bei empfangenen Warnungen, für die bedeutendste Warnung die Description ausgeben. 
-8. Der Baustein soll bei empfangenen Warnungen, für die bedeutendste Warnung die Instruction ausgeben. 
+1. The module shall fetch the content provided by a user configurable URL (*target URL*).
+2. The module shall provide a HTTP server on 127.0.0.1 and a user configurable port.
+3. The module shall fetch data from http and https URL.
+4. The module shall provide the fetched data as response to a incoming GET request.
+5. The module shall set the content header field bases on the *target URL* content information.
 
 ## Software Design Description
 
@@ -81,11 +78,13 @@ x
 
 ### Solution Outline
 
-x
+* Fetch target URL content if corresponding input is set
+* Open a http sever within an own thread
+* Provide the fetched *target data* if a get request is received by the server (URL is don't care)
 
 ## Validation & Verification
 
-x
+* Requirements are verified via unit tests.
 
 ## Licence
 

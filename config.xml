@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <config>
     <modules>
-        <module category="Datenaustausch" context="hsl20_4_WEBCAM_REDIRECT" id="14400" name="Webcam Redicrect (14400)" version="0.01">
+        <module category="Datenaustausch" context="hsl20_4_WEBCAM_REDIRECT" id="14400" name="Webcam Redicrect (14400)" version="0.02">
             <inputs>
 				<input type="number" const_name="nPort" init_value="20002">1: Port</input>
 				<input type="string" const_name="sTargetURL" init_value="">2: Target URL</input>

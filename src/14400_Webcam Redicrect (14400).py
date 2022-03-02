@@ -3,8 +3,9 @@
 import urllib2
 import ssl
 import urlparse
-import http.server
-import socketserver
+import BaseHTTPServer
+import SocketServer
+import threading
 
 ##!!!!##################################################################################################
 #### Own written code can be placed above this commentblock . Do not change or delete commentblock! ####
@@ -25,67 +26,92 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
 #### Own written code can be placed after this commentblock . Do not change or delete commentblock! ####
 ###################################################################################################!!!##
 
-    def get_data(self):
-        url_in = self._get_input_value(self.PIN_I_STARGETURL)  # type : str
-        url_parsed = urlparse.urlparse(url_in)
+        def set_output_value_sbc(self, pin, val):
+            if pin in self.g_out_sbc:
+                if self.g_out_sbc[pin] == val:
+                    print ("# SBC: pin " + str(pin) + " <- data not send / " + str(val))
+                    return
 
-        # Use Framework to resolve the host ip address.
-        host_ip = self.FRAMEWORK.resolve_dns(url_parsed.hostname)
-        # Append port if provided.
-        netloc = host_ip
-        if url_parsed.port is not None:
-            netloc += ':%s' % url_parsed.port
-        # Build URL with the host replaced by the resolved ip address.
-        url_resolved = urlparse.urlunparse((url_parsed[0], netloc) + url_parsed[2:])  # type : str
-        # Build a SSL Context to disable certificate verification.
-        response_data = ""
-        ags = self._get_input_value(self.PIN_I_SAGS)  # type : str
-        try:
-            ctx = ssl._create_unverified_context()
+            self._set_output_value(pin, val)
+            self.g_out_sbc[pin] = val
 
-            request = urllib2.Request(url_resolved)
-            response = urllib2.urlopen(request, context=ctx)
-            response_data = response.read()
-            print(response.info())
-            self.http_request_handler.set_reply(response_data)
+        def get_data(self):
+            url_in = self._get_input_value(self.PIN_I_STARGETURL)  # type : str
+            print("- get_data " + url_in)
+            url_parsed = urlparse.urlparse(url_in)
 
-        except Exception as e:
-            # self.set_output_value_sbc(self.PIN_O_BERROR, True)
-            self.DEBUG.add_message("14400: " + str(e) + " for '" + url_resolved + "'")
-            self.set_output_value_sbc(self.PIN_O_SSTATUS, str(e))
+            # Use Framework to resolve the host ip address.
+            host_ip = self.FRAMEWORK.resolve_dns(url_parsed.hostname)
+            # Append port if provided.
+            netloc = host_ip
+            if url_parsed.port is not None:
+                netloc += ':%s' % url_parsed.port
+            # Build URL with the host replaced by the resolved ip address.
+            url_resolved = urlparse.urlunparse((url_parsed[0], netloc) + url_parsed[2:])  # type : str
+            # Build a SSL Context to disable certificate verification.
+            try:
+                ctx = ssl._create_unverified_context()
 
-        return response_data
+                request = urllib2.Request(url_resolved, headers={'Host': url_parsed.hostname})
+                response = urllib2.urlopen(request, context=ctx)
+                response_data = response.read()
+                header = response.info()
+                if "Content-Type" in header:
+                    self.http_request_handler.response_content_type = header["Content-Type"]
+                    self.DEBUG.set_value("14400 Last content type", header["Content-Type"])
 
-    def run_server(self):
-        port = self._get_input_value(self.PIN_I_NPORT)
+                self.http_request_handler.response_data = response_data
+                self._set_output_value(self.PIN_O_SSTATUS, "Received target data")
+                self.DEBUG.set_value("14400 Last target URL fetched", url_resolved)
 
-        with socketserver.TCPServer(("", port), self.http_request_handler) as httpd:
-            print("Http Server Serving at port", port)
-            httpd.serve_forever()
+            except Exception as e:
+                self.DEBUG.add_message("14400: " + str(e) + " for '" + url_resolved + "'")
+                self._set_output_value(self.PIN_O_SSTATUS, str(e))
 
-    def on_init(self):
-        self.http_request_handler = MyHttpRequestHandler
+        def run_server(self):
+            port = self._get_input_value(self.PIN_I_NPORT)
+            server_address = ('', port)
 
-    def on_input_value(self, index, value):
-        if index == self.PIN_I_NPORT:
-            self.run_server()
+            if self.httpd:
+                self.DEBUG.add_message("14400: Shutting down server")
+                self.httpd.shutdown()
 
-        elif index == self.PIN_I_STARGETURL:
-            self.get_data()
+            self.httpd = ThreadedTCPServer(server_address, self.http_request_handler)
+            ip, port = self.httpd.server_address
+            self.t = threading.Thread(target=self.httpd.serve_forever)
+            self.t.setDaemon(True)
+            self.t.start()
+            self.DEBUG.add_message("14400: Server running on " + str(ip) + ":" + str(port))
 
+        def on_init(self):
+            self.DEBUG = self.FRAMEWORK.create_debug_section()
+            self.g_out_sbc = {}
+            self.httpd = ""
+            self.t = ""
 
-class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
+            self.http_request_handler = MyHttpRequestHandler
+            # self.http_request_handler.on_init()
 
-    def __init__(self):
-        self.response_data = ""
+        def on_input_value(self, index, value):
+            if index == self.PIN_I_NPORT:
+                self.run_server()
 
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', 'text/html; charset=utf-8')
-        self.end_headers()
+            elif index == self.PIN_I_STARGETURL:
+                self.get_data()
 
-        # serve up an infinite stream
-        self.wfile.write(self.response_data)
+    class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
+        pass
 
-    def set_reply(self, data):
-        self.response_data = data
+    # class MyHttpRequestHandler(SocketServer.BaseRequestHandler):
+    class MyHttpRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
+
+        def on_init(self):
+            self.response_content_type = ""
+            self.response_data = ""
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header('Content-type', self.response_content_type)
+            self.end_headers()
+
+            self.wfile.write(self.response_data)

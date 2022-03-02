@@ -1,0 +1,4 @@
+.txt
+tst_14109.py
+.project
+.pydevproject

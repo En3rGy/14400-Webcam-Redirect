@@ -3,3 +3,4 @@ tst_14400.py
 .project
 .pydevproject
 .idea
+.png

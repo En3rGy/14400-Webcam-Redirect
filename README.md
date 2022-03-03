@@ -22,7 +22,7 @@ Use Case: Create dynamic images hosted by different URLs, e.g.
 | No. | Name | Initialisation | Description |
 | --- | --- | --- | --- |
 | 1 | Port | 20002 | Port of the server |
-| 2 | Target URL | "" | URL from where the content is fetched |
+| 2 | Target URL | "" | URL from where the content is fetched; if set as "0", a transparent 4x4 px png image is provided |
 
 ## Outputs
 
@@ -69,6 +69,7 @@ The Python-Code of the module can be accessed via [github](https://github.com/En
 3. The module shall fetch data from http and https URL.
 4. The module shall provide the fetched data as response to a incoming GET request.
 5. The module shall set the content header field bases on the *target URL* content information.
+6. If "0" is set as *target URL*, the module shall set an 4x4 px transparent png-file as *fetched data*.
 
 ## Software Design Description
 

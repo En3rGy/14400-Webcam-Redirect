@@ -193,7 +193,17 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
             self.run_server()
 
         elif index == self.PIN_I_STARGETURL:
-            self.get_data()
+            if value == "0":
+                self.http_request_handler.response_data = "\x00"
+                self._set_output_value(self.PIN_O_SSTATUS, "Presenting empty image")
+
+                empty_png = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x04\x00\x00\x00\x04\x08\x06\x00\x00\x00\xa9\xf1\x9e~\x00\x00\x00\x06bKGD\x00\x00\x00\x00\x00\x00\xf9C\xbb\x7f\x00\x00\x00\x0cIDAT\x08\xd7c`\xa0\x1c\x00\x00\x00D\x00\x01\x06\xc0W\xa2\x00\x00\x00\x00IEND\xaeB`\x82"
+
+                self.http_request_handler.response_data = empty_png
+                self.http_request_handler.response_content_type = "image/png"
+
+            else:
+                self.get_data()
 
 
 class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
@@ -280,6 +290,32 @@ class TestSequenceFunctions(unittest.TestCase):
         data1 = r1.read()
         self.assertTrue(data1 == "Hello user")
         self.assertTrue(r1.getheader("Content-type") == "image/png")
+
+    # 6. If "0" is set as *target URL*, the module shall set an 4x4 px transparent png-file as *fetched data*.
+    def test_6_empty_image(self):
+        print("\n### test_empty_image")
+
+        img = ""
+        with open("empty.png", "rb") as f:
+            img = f.read()
+            f.close()
+
+        # set up http client
+        conn = httplib.HTTPConnection("127.0.0.1", self.port)
+
+        # test
+        self.test.on_init()
+        self.test.on_input_value(self.test.PIN_I_STARGETURL, "0")
+
+        conn.request("GET", "/dummy.png")
+        r1 = conn.getresponse()
+        data1 = r1.read()
+        print("img", img)
+        print("data1", data1)
+        self.assertTrue(img == data1)
+        self.assertTrue(r1.getheader("Content-type") == "image/png")
+
+        time.sleep(10)
 
 
 if __name__ == '__main__':

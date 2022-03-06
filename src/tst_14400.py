@@ -112,10 +112,10 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
         hsl20_4.BaseModule.__init__(self, homeserver_context, "hsl20_4_WEBCAM_REDIRECT")
         self.FRAMEWORK = self._get_framework()
         self.LOGGER = self._get_logger(hsl20_4.LOGGING_NONE,())
-        self.PIN_I_NPORT=1
-        self.PIN_I_STARGETURL=2
+        self.PIN_I_1__BASE_PATH=1
+        self.PIN_I_2__PORT=2
+        self.PIN_I_STARGETURL=3
         self.PIN_O_SSTATUS=1
-
 
 ########################################################################################################
 #### Own written code can be placed after this commentblock . Do not change or delete commentblock! ####
@@ -164,16 +164,28 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
             self._set_output_value(self.PIN_O_SSTATUS, str(e))
 
     def run_server(self):
-        port = self._get_input_value(self.PIN_I_NPORT)
+        port = self._get_input_value(self.PIN_I_2__PORT)
         server_address = ('', port)
 
-        if self.httpd:
-            self.DEBUG.add_message("14400: Shutting down server")
-            self.httpd.shutdown()
+        if self.server:
+            try:
+                self.DEBUG.add_message("14400: Shutting down server")
+                self.server.shutdown()
+                self.server.server_close()
+            except Exception as e:
+                self.DEBUG.add_message("14400: " + str(e))
 
-        self.httpd = ThreadedTCPServer(server_address, self.http_request_handler)
-        ip, port = self.httpd.server_address
-        self.t = threading.Thread(target=self.httpd.serve_forever)
+        try:
+            self.server = ThreadedTCPServer(server_address, self.http_request_handler, bind_and_activate= False)
+            self.server.allow_reuse_address = True
+            self.server.server_bind()
+            self.server.server_activate()
+        except Exception as e:
+            self.DEBUG.add_message("14400: " + str(e))
+            return
+
+        ip, port = self.server.server_address
+        self.t = threading.Thread(target=self.server.serve_forever)
         self.t.setDaemon(True)
         self.t.start()
         self.DEBUG.add_message("14400: Server running on " + str(ip) + ":" + str(port))
@@ -182,18 +194,23 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
     def on_init(self):
         self.DEBUG = self.FRAMEWORK.create_debug_section()
         self.g_out_sbc = {}
-        self.httpd = ""
+        self.server = ""
         self.t = ""
 
         self.http_request_handler = MyHttpRequestHandler
         # self.http_request_handler.on_init()
 
+        self.run_server()
+
     def on_input_value(self, index, value):
-        if index == self.PIN_I_NPORT:
+        if index == self.PIN_I_2__PORT:
             self.run_server()
 
         elif index == self.PIN_I_STARGETURL:
-            if value == "0":
+            if not self.server:
+                self.run_server()
+
+            if value == "0" or value == "":
                 self.http_request_handler.response_data = "\x00"
                 self._set_output_value(self.PIN_O_SSTATUS, "Presenting empty image")
 
@@ -238,13 +255,14 @@ class TestSequenceFunctions(unittest.TestCase):
 
         self.test = WebcamRedicrect_14400_14400(0)
         #self.test.debug_input_value[self.test.PIN_I_SAGS] = self.cred["PIN_I_SAGS"]
+
+        self.port = 20002
+        self.test.debug_input_value[self.test.PIN_I_2__PORT] = self.port
+
         self.test.on_init()
 
         self.target_url = "https://nina.api.proxy.bund.dev/api31/appdata/gsb/eventCodes/BBK-EVC-001.png"
         self.test.debug_input_value[self.test.PIN_I_STARGETURL] = self.target_url
-
-        self.port = 20004
-        self.test.debug_input_value[self.test.PIN_I_NPORT] = self.port
 
     # 1. The module shall fetch the content provided by a user configurable URL (*target URL*).
     # 3. The module shall fetch data from http and https URL.
@@ -267,7 +285,7 @@ class TestSequenceFunctions(unittest.TestCase):
         # test
         self.test.on_init()
         self.test.get_data()
-        self.test.on_input_value(self.test.PIN_I_NPORT, self.port)
+        self.test.on_input_value(self.test.PIN_I_2__PORT, self.port)
         self.test.http_request_handler.response_data = "Hello world"
         time.sleep(3)
 
@@ -316,6 +334,33 @@ class TestSequenceFunctions(unittest.TestCase):
         self.assertTrue(r1.getheader("Content-type") == "image/png")
 
         time.sleep(10)
+
+    def test_new_port(self):
+        print("\n### test_new_port")
+
+        # set up http client
+        conn = httplib.HTTPConnection("127.0.0.1", self.port + 1)
+
+        # test
+        self.test.get_data()
+        self.test.debug_input_value[self.test.PIN_I_2__PORT] = self.port + 1
+        self.test.on_input_value(self.test.PIN_I_2__PORT, self.port + 1)
+        self.test.http_request_handler.response_data = "Hello world"
+        time.sleep(3)
+
+        conn.request("GET", "/dummy.png")
+        r1 = conn.getresponse()
+        print r1.status, r1.reason
+        data1 = r1.read()
+        self.assertTrue(data1 == "Hello world")
+        self.assertTrue(r1.getheader("Content-type") == "image/png")
+
+    def tearDown(self):
+        print("\n### tearDown")
+        if self.test.server:
+            self.test.server.shutdown()
+            self.test.server.server_close()
+            print("- ", self.test.server.server_address)
 
 
 if __name__ == '__main__':

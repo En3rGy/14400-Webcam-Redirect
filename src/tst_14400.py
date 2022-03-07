@@ -151,11 +151,14 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
             response = urllib2.urlopen(request, context=ctx)
             response_data = response.read()
             header = response.info()
-            if "Content-Type" in header:
-                self.http_request_handler.response_content_type = header["Content-Type"]
-                self.DEBUG.set_value("14400 Last content type", header["Content-Type"])
 
-            self.http_request_handler.response_data = response_data
+            with self.http_request_handler.data_lock:
+                if "Content-Type" in header:
+                    self.http_request_handler.response_content_type = header["Content-Type"]
+                    self.DEBUG.set_value("14400 Last content type", header["Content-Type"])
+
+                self.http_request_handler.response_data = response_data
+
             self._set_output_value(self.PIN_O_SSTATUS, "Received target data")
             self.DEBUG.set_value("14400 Last target URL fetched", url_resolved)
 
@@ -211,13 +214,14 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
                 self.run_server()
 
             if value == "0" or value == "":
-                self.http_request_handler.response_data = "\x00"
-                self._set_output_value(self.PIN_O_SSTATUS, "Presenting empty image")
+                with self.http_request_handler.data_lock:
+                    self.http_request_handler.response_data = "\x00"
+                    self._set_output_value(self.PIN_O_SSTATUS, "Presenting empty image")
 
-                empty_png = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x04\x00\x00\x00\x04\x08\x06\x00\x00\x00\xa9\xf1\x9e~\x00\x00\x00\x06bKGD\x00\x00\x00\x00\x00\x00\xf9C\xbb\x7f\x00\x00\x00\x0cIDAT\x08\xd7c`\xa0\x1c\x00\x00\x00D\x00\x01\x06\xc0W\xa2\x00\x00\x00\x00IEND\xaeB`\x82"
+                    empty_png = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x04\x00\x00\x00\x04\x08\x06\x00\x00\x00\xa9\xf1\x9e~\x00\x00\x00\x06bKGD\x00\x00\x00\x00\x00\x00\xf9C\xbb\x7f\x00\x00\x00\x0cIDAT\x08\xd7c`\xa0\x1c\x00\x00\x00D\x00\x01\x06\xc0W\xa2\x00\x00\x00\x00IEND\xaeB`\x82"
 
-                self.http_request_handler.response_data = empty_png
-                self.http_request_handler.response_content_type = "image/png"
+                    self.http_request_handler.response_data = empty_png
+                    self.http_request_handler.response_content_type = "image/png"
 
             else:
                 self.get_data()
@@ -230,16 +234,19 @@ class ThreadedTCPServer(SocketServer.ThreadingMixIn, SocketServer.TCPServer):
 # class MyHttpRequestHandler(SocketServer.BaseRequestHandler):
 class MyHttpRequestHandler(BaseHTTPServer.BaseHTTPRequestHandler):
 
+    data_lock = threading.RLock()
+
     def on_init(self):
         self.response_content_type = ""
         self.response_data = ""
 
     def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-type', self.response_content_type)
-        self.end_headers()
+        with self.data_lock:
+            self.send_response(200)
+            self.send_header('Content-type', self.response_content_type)
+            self.end_headers()
 
-        self.wfile.write(self.response_data)
+            self.wfile.write(self.response_data)
 
 
 ################################################################################

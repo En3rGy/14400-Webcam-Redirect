@@ -14,15 +14,20 @@ Use Case: Create dynamic images hosted by different URLs, e.g.
 - show different status symbols provided by an external source
 
 ### Installation
-1. Create a webcam and connect it to 127.0.0.1:*your port*
-2. Create a logic to create and update the target URL depending on your demands
+- Create a webcam and connect it:
+  - IP-Address: 127.0.0.1
+  - Protocol: https
+  - IP-Port: 443 (independent of input #3)
+  - Path to image: Value of input #1 + a "random" filename, e.g. /14400/img.png
+- Create a logic to create and update the target URL depending on your demands
 
 ## Inputs
 
 | No. | Name | Initialisation | Description |
 | --- | --- | --- | --- |
-| 1 | Port | 20002 | Port of the server |
-| 2 | Target URL | "" | URL from where the content is fetched; if set as "0", a transparent 4x4 px png image is provided |
+| 1 |  Base-Path | "/14400" | Path to the server |
+| 2 | Port | 0 | Internal port of the server; if not set, HS will pick a free one |
+| 3 | Target URL | "" | URL from where the content is fetched; if set as "0", a transparent 4x4 px png image is provided |
 
 ## Outputs
 
@@ -34,17 +39,24 @@ Use Case: Create dynamic images hosted by different URLs, e.g.
 
 - Neuberechnung beim Start: Nein
 - Baustein ist remanent: Nein
-- Baustein Id: 14109
+- Baustein Id: 14400
 - Kategorie: Datenaustausch
 
 ### Change Log
 
+- v0.04
+  - Bug: Fixed port & base path
+  - Impr.: Added thread save data access
+- v0.03
+  - Impr.: Return transparent png if target url is empty or 0 
+- v0.02
+  - Bug: Fixed wrong composition of code of v0.01
 - v0.01
     - Initial Release
 
 ### Open Issues / Know Bugs
 
-- Setting / storing the data of the target URL is not thread safe
+-
 
 ### Support
 

@@ -132,7 +132,7 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
 
     def get_data(self):
         url_in = self._get_input_value(self.PIN_I_STARGETURL)  # type : str
-        print("- get_data " + url_in)
+        self.log_val("Fetch URL", url_in)
         url_parsed = urlparse.urlparse(url_in)
 
         # Use Framework to resolve the host ip address.
@@ -155,43 +155,56 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
             with self.http_request_handler.data_lock:
                 if "Content-Type" in header:
                     self.http_request_handler.response_content_type = header["Content-Type"]
-                    self.DEBUG.set_value("14400 Last content type", header["Content-Type"])
-
+                    self.log_val("Last content type", header["Content-Type"])
                 self.http_request_handler.response_data = response_data
 
             self._set_output_value(self.PIN_O_SSTATUS, "Received target data")
-            self.DEBUG.set_value("14400 Last target URL fetched", url_resolved)
+            self.log("Fetched target URL successfully")
 
         except Exception as e:
-            self.DEBUG.add_message("14400: " + str(e) + " for '" + url_resolved + "'")
+            self.log(str(e) + " for '" + url_resolved + "'")
             self._set_output_value(self.PIN_O_SSTATUS, str(e))
 
-    def run_server(self):
-        port = self._get_input_value(self.PIN_I_2__PORT)
-        server_address = ('', port)
+    def log(self, msg):
+        self.DEBUG.add_message(str(self._get_input_value(self.PIN_I_1__BASE_PATH)) +
+                               ":" + str(self._get_input_value(self.PIN_I_2__PORT)) +
+                               ": " + str(msg))
 
+    def log_val(self, key, val):
+        self.DEBUG.set_value(str(self._get_input_value(self.PIN_I_1__BASE_PATH)) +
+                               ":" + str(self._get_input_value(self.PIN_I_2__PORT)) +
+                               " " + str(key), val)
+
+    def stop_server(self):
         if self.server:
             try:
-                self.DEBUG.add_message("14400: Shutting down server")
+                self.log("Shutting down running server")
                 self.server.shutdown()
                 self.server.server_close()
             except Exception as e:
-                self.DEBUG.add_message("14400: " + str(e))
+                self.log(str(e))
+
+    def run_server(self):
+        self.log("Trying to start server")
+        port = self._get_input_value(self.PIN_I_2__PORT)
+        server_address = ('', port)
+
+        self.stop_server()
 
         try:
-            self.server = ThreadedTCPServer(server_address, self.http_request_handler, bind_and_activate= False)
+            self.server = ThreadedTCPServer(server_address, self.http_request_handler, bind_and_activate=False)
             self.server.allow_reuse_address = True
             self.server.server_bind()
             self.server.server_activate()
         except Exception as e:
-            self.DEBUG.add_message("14400: " + str(e))
+            self.log(str(e))
             return
 
         ip, port = self.server.server_address
         self.t = threading.Thread(target=self.server.serve_forever)
         self.t.setDaemon(True)
         self.t.start()
-        self.DEBUG.add_message("14400: Server running on " + str(ip) + ":" + str(port))
+        self.log("Server running on " + str(ip) + ":" + str(port))
 
 
     def on_init(self):
@@ -201,7 +214,6 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
         self.t = ""
 
         self.http_request_handler = MyHttpRequestHandler
-        # self.http_request_handler.on_init()
 
         self.run_server()
 
@@ -214,6 +226,8 @@ class WebcamRedicrect_14400_14400(hsl20_4.BaseModule):
                 self.run_server()
 
             if value == "0" or value == "":
+                self.log("Reset image")
+
                 with self.http_request_handler.data_lock:
                     self.http_request_handler.response_data = "\x00"
                     self._set_output_value(self.PIN_O_SSTATUS, "Presenting empty image")
@@ -364,10 +378,7 @@ class TestSequenceFunctions(unittest.TestCase):
 
     def tearDown(self):
         print("\n### tearDown")
-        if self.test.server:
-            self.test.server.shutdown()
-            self.test.server.server_close()
-            print("- ", self.test.server.server_address)
+        self.test.stop_server()
 
 
 if __name__ == '__main__':
